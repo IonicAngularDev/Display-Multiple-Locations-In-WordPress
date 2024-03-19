@@ -1,0 +1,151 @@
+Add this code in functions.php
+
+// Register custom post type for locations
+function custom_location_post_type() {
+    $labels = array(
+        'name'               => _x( 'Locations', 'post type general name', 'your-theme-textdomain' ),
+        'singular_name'      => _x( 'Location', 'post type singular name', 'your-theme-textdomain' ),
+        'menu_name'          => _x( 'Locations', 'admin menu', 'your-theme-textdomain' ),
+        'name_admin_bar'     => _x( 'Location', 'add new on admin bar', 'your-theme-textdomain' ),
+        'add_new'            => _x( 'Add New', 'location', 'your-theme-textdomain' ),
+        'add_new_item'       => __( 'Add New Location', 'your-theme-textdomain' ),
+        'new_item'           => __( 'New Location', 'your-theme-textdomain' ),
+        'edit_item'          => __( 'Edit Location', 'your-theme-textdomain' ),
+        'view_item'          => __( 'View Location', 'your-theme-textdomain' ),
+        'all_items'          => __( 'All Locations', 'your-theme-textdomain' ),
+        'search_items'       => __( 'Search Locations', 'your-theme-textdomain' ),
+        'parent_item_colon'  => __( 'Parent Locations:', 'your-theme-textdomain' ),
+        'not_found'          => __( 'No locations found.', 'your-theme-textdomain' ),
+        'not_found_in_trash' => __( 'No locations found in Trash.', 'your-theme-textdomain' )
+    );
+
+    $args = array(
+        'labels'             => $labels,
+        'public'             => true,
+        'publicly_queryable' => true,
+        'show_ui'            => true,
+        'show_in_menu'       => true,
+        'query_var'          => true,
+        'rewrite'            => array( 'slug' => 'location' ),
+        'capability_type'    => 'post',
+        'has_archive'        => true,
+        'hierarchical'       => false,
+        'menu_position'      => null,
+        'supports'           => array( 'title', 'editor' )
+    );
+
+    register_post_type( 'location', $args );
+}
+add_action( 'init', 'custom_location_post_type' );
+
+// Add meta box for latitude and longitude
+function custom_location_metabox() {
+    add_meta_box(
+        'location_metabox',
+        __( 'Location Details', 'your-theme-textdomain' ),
+        'custom_location_metabox_callback',
+        'location'
+    );
+}
+add_action( 'add_meta_boxes', 'custom_location_metabox' );
+
+function custom_location_metabox_callback( $post ) {
+    wp_nonce_field( 'custom_location_metabox_nonce', 'location_metabox_nonce' );
+
+    $latitude = get_post_meta( $post->ID, '_latitude', true );
+    $longitude = get_post_meta( $post->ID, '_longitude', true );
+
+    echo '<label for="latitude">' . __( 'Latitude:', 'your-theme-textdomain' ) . '</label>';
+    echo '<input type="text" id="latitude" name="latitude" value="' . esc_attr( $latitude ) . '" /><br />';
+
+    echo '<label for="longitude">' . __( 'Longitude:', 'your-theme-textdomain' ) . '</label>';
+    echo '<input type="text" id="longitude" name="longitude" value="' . esc_attr( $longitude ) . '" /><br />';
+}
+
+// Save latitude and longitude meta data
+function custom_location_save_meta( $post_id ) {
+    if ( ! isset( $_POST['location_metabox_nonce'] ) || ! wp_verify_nonce( $_POST['location_metabox_nonce'], 'custom_location_metabox_nonce' ) ) {
+        return;
+    }
+
+    if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+        return;
+    }
+
+    if ( isset( $_POST['latitude'] ) ) {
+        update_post_meta( $post_id, '_latitude', sanitize_text_field( $_POST['latitude'] ) );
+    }
+
+    if ( isset( $_POST['longitude'] ) ) {
+        update_post_meta( $post_id, '_longitude', sanitize_text_field( $_POST['longitude'] ) );
+    }
+}
+add_action( 'save_post', 'custom_location_save_meta' );
+
+// Shortcode to display map with all locations
+function display_map_shortcode( $atts ) {
+    $locations = get_posts( array(
+        'post_type' => 'location',
+        'posts_per_page' => -1
+    ) );
+
+    $map_html = '<div id="map" style="height: 400px;"></div>';
+    $map_html .= '<script>
+        function initMap() {
+            var map = new google.maps.Map(document.getElementById("map"), {
+                center: { lat: 0, lng: 0 },
+                zoom: 2
+            });
+
+            var bounds = new google.maps.LatLngBounds();
+
+            var infowindow = new google.maps.InfoWindow();
+
+            var markers = [];
+
+            ';
+
+            foreach ( $locations as $location ) {
+                $latitude = get_post_meta( $location->ID, '_latitude', true );
+                $longitude = get_post_meta( $location->ID, '_longitude', true );
+
+                if ( ! empty( $latitude ) && ! empty( $longitude ) ) {
+                    $map_html .= '
+                        var marker = new google.maps.Marker({
+                            position: { lat: ' . $latitude . ', lng: ' . $longitude . ' },
+                            map: map,
+                            title: "' . esc_js( $location->post_title ) . '"
+                        });
+
+                        markers.push(marker);
+
+                        bounds.extend(marker.getPosition());
+
+                        google.maps.event.addListener(marker, "click", function() {
+                            infowindow.setContent("' . esc_js( $location->post_title ) . '");
+                            infowindow.open(map, marker);
+                        });
+                    ';
+                }
+            }
+
+            $map_html .= '
+            if (markers.length > 0) {
+                map.fitBounds(bounds);
+            }
+        }
+    </script>';
+
+    return $map_html;
+}
+add_shortcode( 'display_map', 'display_map_shortcode' );
+
+// Enqueue Google Maps JavaScript API
+function enqueue_google_maps_api() {
+    $api_key = 'AIzaSyCpP4YoqwKN_vl3tU-x4t-J3aKzq3DnGCs'; // Replace with your Google Maps API key
+
+    // Enqueue Google Maps API with your API key
+	wp_enqueue_script( 'google-maps-api', 'https://maps.googleapis.com/maps/api/js?key=' . $api_key . '&callback=initMap', array(), null, true );
+    wp_script_add_data( 'google-maps-api', 'async', true ); // Add async attribute
+}
+add_action( 'wp_enqueue_scripts', 'enqueue_google_maps_api' );
