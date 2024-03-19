@@ -142,7 +142,7 @@ add_shortcode( 'display_map', 'display_map_shortcode' );
 
 // Enqueue Google Maps JavaScript API
 function enqueue_google_maps_api() {
-    $api_key = 'AIzaSyCpP4YoqwKN_vl3tU-x4t-J3aKzq3DnGCs'; // Replace with your Google Maps API key
+    $api_key = 'Your API Key'; // Replace with your Google Maps API key
 
     // Enqueue Google Maps API with your API key
 	wp_enqueue_script( 'google-maps-api', 'https://maps.googleapis.com/maps/api/js?key=' . $api_key . '&callback=initMap', array(), null, true );
